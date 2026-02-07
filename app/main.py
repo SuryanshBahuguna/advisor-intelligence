@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import shutil
 import json
-
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from chaser.state_machine import get_next_state
 
 from ingestion.docx_reader import load_source_docs
@@ -23,6 +24,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve React build (ui/dist) in production
+UI_DIST = Path(__file__).resolve().parents[1] / "ui" / "dist"
+if UI_DIST.exists():
+    app.mount("/", StaticFiles(directory=str(UI_DIST), html=True), name="ui")
+
 
 SOURCE_DIR = Path("data/source_docs")
 EXTRACTED_DIR = Path("data/extracted")
