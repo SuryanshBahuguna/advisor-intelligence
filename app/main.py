@@ -36,9 +36,34 @@ app.add_middleware(
 SOURCE_DIR = Path("data/source_docs")
 EXTRACTED_DIR = Path("data/extracted")
 TASKS_FILE = Path("data/doc_tasks.json")
+TASKS_FALLBACK = Path("data/doc_tasks_updated.json")  
 
 SOURCE_DIR.mkdir(parents=True, exist_ok=True)
 EXTRACTED_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def read_tasks_file():
+    """
+    Prefer generated tasks (doc_tasks.json).
+    If missing/empty/corrupt (common on hosted ephemeral FS), fall back to committed demo tasks.
+    """
+    if TASKS_FILE.exists():
+        try:
+            txt = TASKS_FILE.read_text(encoding="utf-8").strip()
+            if txt:
+                data = json.loads(txt)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+        except Exception:
+            pass
+
+    if TASKS_FALLBACK.exists():
+        try:
+            return json.loads(TASKS_FALLBACK.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+
+    return []
 
 
 @app.get("/health")
@@ -96,17 +121,12 @@ def run():
 
 @app.get("/tasks")
 def tasks():
-    if not TASKS_FILE.exists():
-        return {"tasks": []}
-    return {"tasks": json.loads(TASKS_FILE.read_text(encoding="utf-8"))}
+    return {"tasks": read_tasks_file()}
 
 
 @app.get("/chaser/tasks")
 def chaser_tasks():
-    if not TASKS_FILE.exists():
-        return []
-
-    tasks_list = json.loads(TASKS_FILE.read_text(encoding="utf-8"))
+    tasks_list = read_tasks_file()
 
     grouped = {}
     for t in tasks_list:
@@ -150,7 +170,7 @@ def intelligence_ask(q: str):
     return engine.ask(q)
 
 
-# ✅ IMPORTANT: mount UI *after* API routes so API endpoints still work
+
 UI_DIST = Path(__file__).resolve().parents[1] / "ui" / "dist"
 if UI_DIST.exists():
     app.mount("/", StaticFiles(directory=str(UI_DIST), html=True), name="ui")
