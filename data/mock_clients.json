@@ -1,0 +1,64 @@
+[
+  {
+    "client_id": "C001",
+    "profile": {
+      "name": "Sarah Mitchell",
+      "age": 49,
+      "email": "sarah@example.com"
+    },
+    "pensions": [
+      {
+        "provider": "Scottish Widows",
+        "loa_status": "SENT_TO_PROVIDER",
+        "days_waiting": 18
+      },
+      {
+        "provider": "Aviva",
+        "loa_status": "AWAITING_CLIENT_SIGNATURE",
+        "days_waiting": 8
+      }
+    ],
+    "conversations": [
+      {
+        "date": "2024-11-05",
+        "summary": "Wants to consolidate pensions before 50th birthday."
+      }
+    ],
+    "missing_documents": [],
+    "compliance": {
+      "days_since_review": 410,
+      "status": "OVERDUE"
+    },
+    "isa_allowance_used": 5000
+  },
+  {
+    "client_id": "C002",
+    "profile": {
+      "name": "John Davies",
+      "age": 42,
+      "email": "john@example.com"
+    },
+    "pensions": [],
+    "conversations": [
+      {
+        "date": "2025-01-15",
+        "summary": "Advisor promised consolidation options by Feb 1."
+      }
+    ],
+    "missing_documents": [
+      {
+        "type": "passport",
+        "chase_count": 2
+      },
+      {
+        "type": "P60",
+        "chase_count": 1
+      }
+    ],
+    "compliance": {
+      "days_since_review": 120,
+      "status": "OK"
+    },
+    "isa_allowance_used": 20000
+  }
+]

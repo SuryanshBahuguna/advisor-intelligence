@@ -1,0 +1,30 @@
+[
+  {
+    "client_id": "C001",
+    "client_name": "Sarah Mitchell",
+    "task": "ATR questionnaire",
+    "status": "pending",
+    "due_days_ago": 3
+  },
+  {
+    "client_id": "C001",
+    "client_name": "Sarah Mitchell",
+    "task": "Meeting pack sign-off",
+    "status": "pending",
+    "due_days_ago": 1
+  },
+  {
+    "client_id": "C002",
+    "client_name": "John Davies",
+    "task": "LOA from provider",
+    "status": "pending",
+    "due_days_ago": 2
+  },
+  {
+    "client_id": "C002",
+    "client_name": "John Davies",
+    "task": "Pre-meeting questionnaire",
+    "status": "completed",
+    "due_days_ago": 0
+  }
+]
