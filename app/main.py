@@ -3,33 +3,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import shutil
 import json
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from chaser.state_machine import get_next_state
 
 from ingestion.docx_reader import load_source_docs
 from ingestion.build_tasks_from_docs import make_client_id, sane_anchor_date
-from ingestion.extractor import guess_client_name, find_any_date, parse_date_hint, extract_presence, build_tasks
+from ingestion.extractor import (
+    guess_client_name,
+    find_any_date,
+    parse_date_hint,
+    extract_presence,
+    build_tasks,
+)
 
 from intelligence.query_engine import QueryEngine
 from intelligence.vector_store import get_db
 
-
 app = FastAPI()
 
+# In production (same-origin), CORS isn't required, but keeping localhost helps dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Serve React build (ui/dist) in production
-UI_DIST = Path(__file__).resolve().parents[1] / "ui" / "dist"
-if UI_DIST.exists():
-    app.mount("/", StaticFiles(directory=str(UI_DIST), html=True), name="ui")
-
 
 SOURCE_DIR = Path("data/source_docs")
 EXTRACTED_DIR = Path("data/extracted")
@@ -146,3 +148,9 @@ def intelligence_ask(q: str):
     db = get_db()
     engine = QueryEngine(db)
     return engine.ask(q)
+
+
+# ✅ IMPORTANT: mount UI *after* API routes so API endpoints still work
+UI_DIST = Path(__file__).resolve().parents[1] / "ui" / "dist"
+if UI_DIST.exists():
+    app.mount("/", StaticFiles(directory=str(UI_DIST), html=True), name="ui")

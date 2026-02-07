@@ -3,7 +3,6 @@ import axios from "axios";
 
 const API = import.meta.env.VITE_API_BASE || "";
 
-
 function chipStyle(kind) {
   const base = {
     display: "inline-block",
@@ -45,13 +44,29 @@ export default function App() {
   const [error, setError] = useState("");
 
   async function loadTasks() {
+    const ts = Date.now();
+    const url = `${API}/chaser/tasks?_ts=${ts}`;
+
+    console.log("[UI] Refresh clicked. Fetching:", url);
+
     try {
       setError("");
       setLoadingTasks(true);
-      const res = await axios.get(`${API}/chaser/tasks`);
-      setTaskData(res.data || []);
+
+      const res = await axios.get(url, {
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+
+      console.log("[UI] /chaser/tasks response:", res.data);
+
+      setTaskData(Array.isArray(res.data) ? res.data : []);
     } catch (e) {
-      setError("Failed to load tasks. Is backend running on port 8000?");
+      console.error("[UI] Failed to load tasks:", e);
+      setError("Failed to load tasks. Check console + Network tab for the /chaser/tasks call.");
+      setTaskData([]);
     } finally {
       setLoadingTasks(false);
     }
@@ -59,38 +74,52 @@ export default function App() {
 
   async function runAsk() {
     if (!question.trim()) return;
+
+    const ts = Date.now();
+    const url = `${API}/intelligence/ask?q=${encodeURIComponent(question.trim())}&_ts=${ts}`;
+    console.log("[UI] Asking:", url);
+
     try {
       setError("");
       setAsking(true);
+
       const res = await axios.get(`${API}/intelligence/ask`, {
-        params: { q: question.trim() },
+        params: { q: question.trim(), _ts: ts },
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
       });
+
       setAnswer(res.data);
     } catch (e) {
-      setError("Failed to run query. Check /intelligence/ask is working.");
+      console.error("[UI] Failed to run query:", e);
+      setError("Failed to run query. Check console + backend /intelligence/ask.");
     } finally {
       setAsking(false);
     }
   }
 
   useEffect(() => {
+    console.log("[UI] Mounted. API base:", API || "(empty => same origin)");
     loadTasks();
   }, []);
 
   const grouped = useMemo(() => {
-    const m = new Map();
-    for (const row of taskData) {
-      if (!m.has(row.client)) m.set(row.client, []);
-      m.get(row.client).push(...(row.tasks || []));
-    }
-
     const pr = { high: 3, medium: 2, low: 1 };
-    for (const [k, arr] of m.entries()) {
-      arr.sort((a, b) => (pr[b.priority] || 0) - (pr[a.priority] || 0));
-      m.set(k, arr);
+
+    const norm = (Array.isArray(taskData) ? taskData : [])
+      .filter((x) => x && typeof x === "object")
+      .map((row) => ({
+        client: row.client || "Unknown",
+        tasks: Array.isArray(row.tasks) ? row.tasks.slice() : [],
+      }));
+
+    for (const g of norm) {
+      g.tasks.sort((a, b) => (pr[b?.priority] || 0) - (pr[a?.priority] || 0));
     }
 
-    return Array.from(m.entries()).map(([client, tasks]) => ({ client, tasks }));
+    return norm;
   }, [taskData]);
 
   const clientSeverity = useMemo(() => {
@@ -106,6 +135,8 @@ export default function App() {
     }
     return out;
   }, [grouped]);
+
+  const totalTasks = useMemo(() => grouped.reduce((acc, g) => acc + (g.tasks?.length || 0), 0), [grouped]);
 
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: 20, fontFamily: "system-ui, Arial" }}>
@@ -125,6 +156,12 @@ export default function App() {
         >
           {loadingTasks ? "Refreshing..." : "Refresh"}
         </button>
+      </div>
+
+      <div style={{ marginTop: 10, color: "#666", fontSize: 13 }}>
+        <b>API base:</b> <code>{API || "(empty => same origin)"}</code>
+        {" · "}
+        Loaded <b>{grouped.length}</b> clients · <b>{totalTasks}</b> tasks
       </div>
 
       <div style={{ marginTop: 16, padding: 14, border: "1px solid #eee", borderRadius: 12 }}>
@@ -185,62 +222,68 @@ export default function App() {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 18, display: "grid", gap: 14 }}>
-        {grouped.map(({ client, tasks }) => {
-          const cSev = clientSeverity[client] || "GREEN";
-          return (
-            <div key={client} style={{ border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ fontSize: 20, fontWeight: 950 }}>{client}</div>
-                <span style={chipStyle(cSev)}>{severityLabel(cSev)}</span>
-              </div>
+      {grouped.length === 0 ? (
+        <div style={{ marginTop: 18, padding: 14, border: "1px dashed #ddd", borderRadius: 12, color: "#666" }}>
+          No tasks loaded. Open Console + Network → click Refresh → verify a <code>/chaser/tasks</code> request happens.
+        </div>
+      ) : (
+        <div style={{ marginTop: 18, display: "grid", gap: 14 }}>
+          {grouped.map(({ client, tasks }) => {
+            const cSev = clientSeverity[client] || "GREEN";
+            return (
+              <div key={client} style={{ border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ fontSize: 20, fontWeight: 950 }}>{client}</div>
+                  <span style={chipStyle(cSev)}>{severityLabel(cSev)}</span>
+                </div>
 
-              <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                {tasks.map((t, i) => {
-                  const sev = severityFromState(t.state);
-                  return (
-                    <div
-                      key={`${t.item}-${i}`}
-                      style={{
-                        border: "1px solid #eee",
-                        borderRadius: 12,
-                        padding: 12,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                        <div style={{ fontWeight: 900 }}>
-                          {t.item} <span style={{ fontWeight: 700, color: "#444" }}>({t.priority})</span>
+                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                  {tasks.map((t, i) => {
+                    const sev = severityFromState(t.state);
+                    return (
+                      <div
+                        key={`${t.item}-${i}`}
+                        style={{
+                          border: "1px solid #eee",
+                          borderRadius: 12,
+                          padding: 12,
+                          display: "grid",
+                          gap: 6,
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                          <div style={{ fontWeight: 900 }}>
+                            {t.item} <span style={{ fontWeight: 700, color: "#444" }}>({t.priority})</span>
+                          </div>
+                          <span style={chipStyle(sev)}>{severityLabel(sev)}</span>
                         </div>
-                        <span style={chipStyle(sev)}>{severityLabel(sev)}</span>
-                      </div>
 
-                      <div style={{ color: "#333" }}>
-                        <b>State:</b> {t.state}
-                      </div>
-                      <div style={{ color: "#333" }}>
-                        <b>Due:</b> {t.due_date}
-                      </div>
-                      <div style={{ color: "#333" }}>
-                        <b>Action:</b> {t.action}
-                      </div>
+                        <div style={{ color: "#333" }}>
+                          <b>State:</b> {t.state}
+                        </div>
+                        <div style={{ color: "#333" }}>
+                          <b>Due:</b> {t.due_date}
+                        </div>
+                        <div style={{ color: "#333" }}>
+                          <b>Action:</b> {t.action}
+                        </div>
 
-                      {sev === "GREEN" ? (
-                        <div style={{ fontSize: 12, color: "#137a3a" }}>No action required yet</div>
-                      ) : null}
+                        {sev === "GREEN" ? (
+                          <div style={{ fontSize: 12, color: "#137a3a" }}>No action required yet</div>
+                        ) : null}
 
-                      <div style={{ color: "#666", fontSize: 13 }}>
-                        <b>Target:</b> {t.target} · <b>Required:</b> {t.required_for} · <b>Source:</b> {t.source}
+                        <div style={{ color: "#666", fontSize: 13 }}>
+                          <b>Target:</b> {t.target} · <b>Required:</b> {t.required_for} · <b>Source:</b> {t.source}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       <div style={{ marginTop: 18, color: "#666", fontSize: 13 }}>
         Tip: Update docs → run <b>python -m ingestion.build_tasks_from_docs</b> → hit <b>Refresh</b>.
