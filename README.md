@@ -1,6 +1,8 @@
 Agentic Advisor Chaser – End-to-End AI Assistant for Financial Advisers
 Overview
 
+(Demo Link: https://drive.google.com/file/d/1tjk2mKuVV0YuEumcAZzcvFDL_510xaRn/view?usp=drive_link)
+
 Agentic Advisor Chaser is an AI-powered system that:
 
 Reads unstructured adviser documents (Fact Finds, Meeting Notes, Client Docs)
@@ -141,35 +143,71 @@ advisor-intelligence/
 │   ├── src/
 │   └── dist/                # Built frontend (served by FastAPI)
 
-▶️ How to Run Locally (Step-by-Step)
-1️⃣ Backend Setup
+
+
+How to Run Locally (Step-by-Step)
+1️⃣ Backend Setup (Python / FastAPI)
+Required Libraries
+fastapi
+uvicorn
+python-multipart
+pydantic
+python-docx
+sentence-transformers
+chromadb
+torch
+numpy
+scikit-learn
+Note: torch is required by sentence-transformers
+
+Setup Instructions
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+
+
+Activate the virtual environment:
+
+Mac / Linux:
+source venv/bin/activate
+
+Windows
+venv\Scripts\activate
+
+Install dependencies and start backend:
+
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 
 
-Backend runs on:
-
+Backend will run at:
 http://localhost:8000
 
-2️⃣ Frontend Setup
+2️⃣ Frontend Setup (React / Vite)
+Required Libraries
+react
+react-dom
+vite
+axios
+
+Setup Instructions
 cd ui
 npm install
 npm run dev
 
 
-UI runs on:
-
+Frontend will run at:
 http://localhost:5173
 
+3️⃣ UI Environment Variables (Required)
 
-Create ui/.env:
+Create a file:
+ui/.env
 
+Add the following:
 VITE_API_BASE=http://localhost:8000
 
+This allows the React UI to communicate with the FastAPI backend.
+Restart the UI after creating the .env file.
 
-Restart UI after adding .env.
 
 ## How to Ingest New Documents
 
@@ -177,12 +215,9 @@ Restart UI after adding .env.
 To ingest new files:
 
 Copy .docx files into:
-
 data/source_docs/
 
-
 Run ingestion:
-
 python -m ingestion.build_tasks_from_docs
 
 You do NOT need to run `load_source_docs` manually.
