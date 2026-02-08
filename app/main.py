@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import json
 from fastapi.staticfiles import StaticFiles
+
 from chaser.state_machine import get_next_state
 
 from ingestion.docx_reader import load_source_docs
@@ -19,9 +20,10 @@ from ingestion.extractor import (
 from intelligence.query_engine import QueryEngine
 from intelligence.vector_store import get_db
 
+
 app = FastAPI()
 
-# In production (same-origin), CORS isn't required, but keeping localhost helps dev
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -35,35 +37,86 @@ app.add_middleware(
 
 SOURCE_DIR = Path("data/source_docs")
 EXTRACTED_DIR = Path("data/extracted")
+
+
 TASKS_FILE = Path("data/doc_tasks.json")
-TASKS_FALLBACK = Path("data/doc_tasks_updated.json")  
+TASKS_FALLBACK_FILE = Path("data/doc_tasks_updated.json")
 
 SOURCE_DIR.mkdir(parents=True, exist_ok=True)
 EXTRACTED_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def read_tasks_file():
-    """
-    Prefer generated tasks (doc_tasks.json).
-    If missing/empty/corrupt (common on hosted ephemeral FS), fall back to committed demo tasks.
-    """
-    if TASKS_FILE.exists():
-        try:
-            txt = TASKS_FILE.read_text(encoding="utf-8").strip()
-            if txt:
-                data = json.loads(txt)
-                if isinstance(data, list) and len(data) > 0:
-                    return data
-        except Exception:
-            pass
 
-    if TASKS_FALLBACK.exists():
-        try:
-            return json.loads(TASKS_FALLBACK.read_text(encoding="utf-8"))
-        except Exception:
-            return []
+@app.on_event("startup")
+def preload_embeddings():
+    """
+    Ensures the vector DB has embeddings at deploy time.
+    This makes /intelligence/ask work immediately for judges.
 
-    return []
+    Strategy:
+    - load all docs from data/source_docs
+    - add each doc to vector DB if not already present
+    """
+    try:
+        docs = load_source_docs(str(SOURCE_DIR))
+        if not docs:
+            print("[startup] No source docs found. Skipping embeddings preload.")
+            return
+
+        db = get_db()
+
+        
+        already_has_data = False
+        try:
+            already_has_data = (db._collection.count() > 0)  
+        except Exception:
+            already_has_data = False
+
+        if already_has_data:
+            print("[startup] Vector store already has data. Skipping preload.")
+            return
+
+        
+        texts = []
+        metadatas = []
+        ids = []
+
+        for d in docs:
+            text = d.get("text", "")
+            file_name = d.get("file_name", "unknown.docx")
+            if not text.strip():
+                continue
+
+            client_id = make_client_id(file_name)
+            client_name = guess_client_name(text) or file_name.replace(".docx", "")
+
+            texts.append(text)
+            metadatas.append(
+                {
+                    "client_id": client_id,
+                    "client_name": client_name,
+                    "source": file_name,
+                }
+            )
+            ids.append(client_id)
+
+        if not texts:
+            print("[startup] No valid text to embed. Skipping preload.")
+            return
+
+        # Chroma style add
+        # If your get_db() returns a wrapper, adjust accordingly.
+        try:
+            db.add_documents(texts=texts, metadatas=metadatas, ids=ids)
+        except Exception:
+            # fallback: if db is a raw chroma collection
+            db.add(documents=texts, metadatas=metadatas, ids=ids)
+
+        print(f"[startup] Preloaded {len(texts)} docs into vector store ✅")
+
+    except Exception as e:
+       
+        print(f"[startup] Preload embeddings failed (continuing anyway): {e}")
 
 
 @app.get("/health")
@@ -121,12 +174,23 @@ def run():
 
 @app.get("/tasks")
 def tasks():
-    return {"tasks": read_tasks_file()}
+    # stable demo fallback
+    if TASKS_FILE.exists():
+        return {"tasks": json.loads(TASKS_FILE.read_text(encoding="utf-8"))}
+    if TASKS_FALLBACK_FILE.exists():
+        return {"tasks": json.loads(TASKS_FALLBACK_FILE.read_text(encoding="utf-8"))}
+    return {"tasks": []}
 
 
 @app.get("/chaser/tasks")
 def chaser_tasks():
-    tasks_list = read_tasks_file()
+    # stable demo fallback
+    if TASKS_FILE.exists():
+        tasks_list = json.loads(TASKS_FILE.read_text(encoding="utf-8"))
+    elif TASKS_FALLBACK_FILE.exists():
+        tasks_list = json.loads(TASKS_FALLBACK_FILE.read_text(encoding="utf-8"))
+    else:
+        return []
 
     grouped = {}
     for t in tasks_list:
